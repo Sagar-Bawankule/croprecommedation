@@ -181,6 +181,119 @@ async def get_rotation_plan(crop: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating rotation plan: {str(e)}")
 
+@app.get("/api/soil-weather-data/{latitude}/{longitude}")
+async def get_soil_weather_data(latitude: float, longitude: float):
+    """Get combined soil and weather data for location-based form auto-fill"""
+    try:
+        # Fetch soil and weather data concurrently
+        soil_task = soil_service.get_soil_data(latitude, longitude)
+        weather_task = weather_service.get_weather_forecast(latitude, longitude, 1)
+        location_task = geo_service.get_location_info(latitude, longitude)
+        
+        soil_data, weather_data, location_info = await asyncio.gather(
+            soil_task, weather_task, location_task
+        )
+        
+        # Check if weather data is fallback data (indicating API failure)
+        # If we got fallback data, use location-based fallback instead
+        if weather_data and len(weather_data) > 0:
+            first_weather = weather_data[0]
+            # Check if this looks like generic fallback data
+            if (first_weather.get("rainfall") == 2.0 and 
+                first_weather.get("temperature_max") == 28.0 and 
+                first_weather.get("temperature_min") == 18.0):
+                # Replace with location-based fallback
+                weather_data = weather_service._get_location_based_fallback_weather(latitude, longitude, 1)
+        
+        # Extract current weather values
+        current_weather = weather_data[0] if weather_data else {}
+        
+        # Calculate average temperature from max and min
+        avg_temp = 25.0
+        if current_weather.get("temperature_max") is not None and current_weather.get("temperature_min") is not None:
+            avg_temp = (current_weather.get("temperature_max") + current_weather.get("temperature_min")) / 2
+        
+        # Get total rainfall - for a single day this is the same as the daily rainfall
+        rainfall = current_weather.get("rainfall", 100.0)
+        
+        # Ensure we have the correct pH value (both ph and ph_level should be the same)
+        ph_value = soil_data.get("ph_level", soil_data.get("ph", 6.5))
+        
+        # Debug: Print weather and soil data
+        print(f"Weather data received: rainfall={current_weather.get('rainfall')}, temp_max={current_weather.get('temperature_max')}, temp_min={current_weather.get('temperature_min')}")
+        print(f"Soil data received: pH={soil_data.get('ph')}, pH_level={soil_data.get('ph_level')}")
+        print(f"Final values: pH={ph_value}, rainfall={rainfall}")
+        
+        # Combine data for form auto-fill
+        form_data = {
+            "nitrogen": soil_data.get("nitrogen", 80.0),
+            "phosphorus": soil_data.get("phosphorus", 45.0),
+            "potassium": soil_data.get("potassium", 180.0),
+            "ph": ph_value,
+            "ph_level": ph_value,  # Include both for consistency
+            "rainfall": rainfall,
+            "temperature": round(avg_temp, 1),
+            "humidity": current_weather.get("humidity", 70.0),
+            "location_info": location_info,
+            "soil_details": {
+                "clay_content": soil_data.get("clay_content", 25.0),
+                "sand_content": soil_data.get("sand_content", 45.0),
+                "silt_content": soil_data.get("silt_content", 30.0),
+                "organic_carbon": soil_data.get("organic_carbon", 2.5),
+                "soil_type": soil_data.get("soil_type", "Loam")
+            }
+        }
+        
+        return {"success": True, "data": form_data}
+        
+    except Exception as e:
+        print(f"Error in soil-weather-data endpoint: {e}")
+        # Return location-specific fallback data
+        fallback_soil = SoilGridsService._get_location_based_fallback(latitude, longitude)
+        fallback_weather = WeatherService._get_fallback_weather_data()
+        
+        # Get location-based fallback weather instead of generic fallback
+        fallback_weather = WeatherService._get_location_based_fallback_weather(latitude, longitude, 1)
+        current_weather = fallback_weather[0] if fallback_weather else {}
+        
+        # Calculate average temperature from max and min
+        avg_temp = 25.0
+        if current_weather.get("temperature_max") is not None and current_weather.get("temperature_min") is not None:
+            avg_temp = (current_weather.get("temperature_max") + current_weather.get("temperature_min")) / 2
+            
+        # Get pH value
+        ph_value = fallback_soil.get("ph_level", fallback_soil.get("ph", 6.5))
+        
+        # Debug: Print fallback soil data to check pH value
+        print(f"Fallback soil data: pH={fallback_soil.get('ph')}, pH_level={fallback_soil.get('ph_level')}")
+        print(f"Final fallback pH value: {ph_value}")
+            
+        form_data = {
+            "nitrogen": fallback_soil.get("nitrogen", 80.0),
+            "phosphorus": fallback_soil.get("phosphorus", 45.0),
+            "potassium": fallback_soil.get("potassium", 180.0),
+            "ph": ph_value,
+            "ph_level": ph_value,  # Include both for consistency
+            "rainfall": current_weather.get("rainfall", 100.0),
+            "temperature": round(avg_temp, 1),
+            "humidity": current_weather.get("humidity", 70.0),
+            "location_info": {
+                "display_name": f"Location {latitude:.2f}, {longitude:.2f}",
+                "city": "Unknown City",
+                "state": "Unknown State",
+                "country": "Unknown Country"
+            },
+            "soil_details": {
+                "clay_content": fallback_soil.get("clay_content", 25.0),
+                "sand_content": fallback_soil.get("sand_content", 45.0),
+                "silt_content": fallback_soil.get("silt_content", 30.0),
+                "organic_carbon": fallback_soil.get("organic_carbon", 2.5),
+                "soil_type": fallback_soil.get("soil_type", "Loam")
+            }
+        }
+        
+        return {"success": False, "data": form_data, "message": "Using estimated data"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

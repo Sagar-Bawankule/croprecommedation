@@ -56,6 +56,12 @@ export const cropAPI = {
     const response = await api.get(`/api/location/${latitude}/${longitude}`);
     return response.data;
   },
+  
+  // Get combined soil and weather data for location
+  getSoilWeatherData: async (latitude, longitude) => {
+    const response = await api.get(`/api/soil-weather-data/${latitude}/${longitude}`);
+    return response.data;
+  },
 
   // Get market trends
   getMarketTrends: async () => {

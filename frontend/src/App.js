@@ -12,9 +12,12 @@ function App() {
   const [recommendationData, setRecommendationData] = useState(null);
   const [error, setError] = useState('');
   const [apiStatus, setApiStatus] = useState('checking');
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationError, setLocationError] = useState('');
 
   useEffect(() => {
     checkApiHealth();
+    getUserLocation();
   }, []);
 
   const checkApiHealth = async () => {
@@ -24,6 +27,42 @@ function App() {
     } catch (error) {
       setApiStatus('disconnected');
       console.error('API health check failed:', error);
+    }
+  };
+
+  const getUserLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+          setLocationError('');
+          console.log('User location obtained:', position.coords.latitude, position.coords.longitude);
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          setLocationError('Unable to get your location. Using default location.');
+          // Set a default location (e.g., center of India) instead of 0,0
+          setUserLocation({
+            latitude: 20.5937,
+            longitude: 78.9629
+          });
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000
+        }
+      );
+    } else {
+      setLocationError('Geolocation is not supported by this browser.');
+      // Set a default location (center of India)
+      setUserLocation({
+        latitude: 20.5937,
+        longitude: 78.9629
+      });
     }
   };
 
@@ -218,16 +257,33 @@ function App() {
             </div>
 
             {/* Location & Soil Map */}
-            {recommendationData.location_info && (
-              <SoilMap 
-                location={{
-                  latitude: recommendationData.location_info.latitude || 0,
-                  longitude: recommendationData.location_info.longitude || 0
-                }}
-                soilData={recommendationData.soil_data}
-                locationInfo={recommendationData.location_info}
-              />
-            )}
+            <SoilMap 
+              location={userLocation || {
+                latitude: recommendationData.location_info?.latitude || 20.5937,
+                longitude: recommendationData.location_info?.longitude || 78.9629
+              }}
+              soilData={recommendationData.soil_data ? {
+                soil_type: recommendationData.soil_data.soil_type || "Loam",
+                ph_level: recommendationData.soil_data.ph_level || 7.0,
+                clay_content: recommendationData.soil_data.clay_content || 35,
+                sand_content: recommendationData.soil_data.sand_content || 45,
+                silt_content: recommendationData.soil_data.silt_content || 20,
+                organic_carbon: recommendationData.soil_data.organic_carbon || 2.5
+              } : {
+                soil_type: "Loam",
+                ph_level: 7.0,
+                clay_content: 35,
+                sand_content: 45,
+                silt_content: 20,
+                organic_carbon: 2.5
+              }}
+              locationInfo={{
+                city: recommendationData.location_info?.city || "Your Location",
+                state: recommendationData.location_info?.state || "",
+                district: recommendationData.location_info?.district || ""
+              }}
+              locationError={locationError}
+            />
 
             {/* Weather Dashboard */}
             {recommendationData.weather_forecast && (

@@ -91,3 +91,29 @@ coverage.xml
 # Backup files
 *.bak
 *~
+
+# VS Code workspace files
+*.code-workspace
+
+# Package lock files (optional - choose one)
+# package-lock.json
+# yarn.lock
+
+# Terminal files
+*.bat
+*.sh
+
+# Machine Learning Models (if they should be regenerated)
+# *.pkl
+# *.joblib
+
+# Data files (uncomment if data files shouldn't be tracked)
+# *.csv
+# *.json
+
+# Build and setup files
+complete_setup.bat
+setup.bat
+setup.sh
+start.bat
+start.sh
