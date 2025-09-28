@@ -21,11 +21,16 @@ class CropRecommendationService:
     def load_models(self):
         """Load trained ML models"""
         try:
-            with open('randomforest_model.pkl', 'rb') as f:
+            import os
+            # Get the path to the backend directory
+            backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            print(f"Loading models from: {backend_dir}")
+            
+            with open(os.path.join(backend_dir, 'randomforest_model.pkl'), 'rb') as f:
                 self.model = pickle.load(f)
-            with open('scaler.pkl', 'rb') as f:
+            with open(os.path.join(backend_dir, 'scaler.pkl'), 'rb') as f:
                 self.scaler = pickle.load(f)
-            with open('label_encoder.pkl', 'rb') as f:
+            with open(os.path.join(backend_dir, 'label_encoder.pkl'), 'rb') as f:
                 self.label_encoder = pickle.load(f)
             print("Models loaded successfully")
         except FileNotFoundError as e:
@@ -76,19 +81,36 @@ class CropRecommendationService:
     def get_crop_recommendations(self, soil_params: Dict, budget: float) -> List[Dict]:
         """Get crop recommendations with profitability analysis"""
         if not self.model:
+            print("Error: Model not loaded. Check if model files exist and are accessible.")
             return []
         
-        # Convert inputs to DataFrame and scale
-        input_df = pd.DataFrame([soil_params])
-        input_scaled = self.scaler.transform(input_df)
-        
-        # Get probabilities for all crops
-        probabilities = self.model.predict_proba(input_scaled)
-        
-        # Get top 5 crops instead of 3 for better variety
-        top_indices = np.argsort(probabilities)[0][-5:][::-1]
-        top_crops = self.label_encoder.inverse_transform(top_indices)
-        top_probs = probabilities[0][top_indices]
+        try:
+            print(f"Generating crop recommendations for parameters: {soil_params}, budget: {budget}")
+            
+            # Convert inputs to DataFrame and scale
+            input_df = pd.DataFrame([soil_params])
+            print(f"Input dataframe shape: {input_df.shape}, columns: {input_df.columns.tolist()}")
+            
+            # Ensure the input dataframe has the correct columns in the correct order
+            expected_columns = ['N', 'P', 'K', 'temperature', 'humidity', 'ph', 'rainfall']
+            input_df = pd.DataFrame([{col: soil_params.get(col, 0) for col in expected_columns}])
+            
+            input_scaled = self.scaler.transform(input_df)
+            print(f"Scaled input shape: {input_scaled.shape}")
+            
+            # Get probabilities for all crops
+            probabilities = self.model.predict_proba(input_scaled)
+            print(f"Prediction probabilities shape: {probabilities.shape}")
+            
+            # Get top 5 crops instead of 3 for better variety
+            top_indices = np.argsort(probabilities)[0][-5:][::-1]
+            top_crops = self.label_encoder.inverse_transform(top_indices)
+            top_probs = probabilities[0][top_indices]
+            
+            print(f"Top 5 crops: {top_crops}")
+        except Exception as e:
+            print(f"Error generating crop recommendations: {e}")
+            return []
         
         recommendations = []
         
