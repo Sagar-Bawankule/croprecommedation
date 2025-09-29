@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Sprout, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { Sprout, AlertCircle, CheckCircle, Loader, Stethoscope, BarChart3 } from 'lucide-react';
 import SoilParameterForm from './components/SoilParameterForm';
 import CropRecommendationResults from './components/CropRecommendationResults';
+import CropTreatmentAnalysis from './components/CropTreatmentAnalysis';
 import WeatherDashboard from './components/WeatherDashboard';
 import SoilMap from './components/SoilMap';
 import { cropAPI } from './services/api';
@@ -14,6 +15,7 @@ function App() {
   const [apiStatus, setApiStatus] = useState('checking');
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState('');
+  const [activeTab, setActiveTab] = useState('recommendations'); // 'recommendations' or 'treatment'
 
   useEffect(() => {
     checkApiHealth();
@@ -176,8 +178,40 @@ function App() {
           </div>
         )}
 
-        {/* Form Section */}
+        {/* Tab Navigation */}
         {!recommendationData && (
+          <div className="mb-8">
+            <div className="bg-white rounded-lg shadow-sm p-2">
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setActiveTab('recommendations')}
+                  className={`flex-1 px-6 py-3 rounded-md font-medium transition-colors flex items-center justify-center ${
+                    activeTab === 'recommendations'
+                      ? 'bg-green-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  <BarChart3 className="h-5 w-5 mr-2" />
+                  Crop Recommendations
+                </button>
+                <button
+                  onClick={() => setActiveTab('treatment')}
+                  className={`flex-1 px-6 py-3 rounded-md font-medium transition-colors flex items-center justify-center ${
+                    activeTab === 'treatment'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  <Stethoscope className="h-5 w-5 mr-2" />
+                  Crop Treatment Analysis
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Form Section */}
+        {!recommendationData && activeTab === 'recommendations' && (
           <div className="space-y-6">
             <div className="text-center">
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
@@ -234,6 +268,24 @@ function App() {
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Crop Treatment Analysis Section */}
+        {!recommendationData && activeTab === 'treatment' && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                Crop Treatment Analysis
+              </h2>
+              <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+                Analyze your soil conditions for specific crops and get detailed treatment plans with 
+                improvement recommendations and cost analysis. Perfect for optimizing existing crops 
+                or planning targeted soil improvements.
+              </p>
+            </div>
+            
+            <CropTreatmentAnalysis />
           </div>
         )}
 
@@ -296,19 +348,7 @@ function App() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center">
-            <p className="text-gray-600">
-              Intelligent Crop Recommendation System - Powered by AI and Real-time Data
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              Built with React, FastAPI, and machine learning for sustainable agriculture
-            </p>
-          </div>
-        </div>
-      </footer>
+     
     </div>
   );
 }

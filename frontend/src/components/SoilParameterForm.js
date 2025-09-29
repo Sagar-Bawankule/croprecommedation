@@ -98,17 +98,31 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
     // Note: Removed auto-location on mount to avoid permission prompts
     // Users should explicitly click "Get My Location" button
     
+    console.log('SoilParameterForm useEffect running - fetching crop list...');
     // Fetch crop list for analysis feature
     fetchCropList();
   }, []);
 
   const fetchCropList = async () => {
     try {
+      console.log('Fetching crop list from /api/crops...');
       const response = await fetch('/api/crops');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
+      console.log('Crop list response:', data);
+      
       setCropList(data.crops || []);
+      console.log('Crop list set to:', data.crops || []);
     } catch (error) {
       console.error('Error fetching crop list:', error);
+      // Set fallback crop list in case of error
+      const fallbackCrops = ['rice', 'maize', 'chickpea', 'wheat', 'cotton', 'banana', 'mango', 'orange'];
+      setCropList(fallbackCrops);
+      console.log('Using fallback crop list:', fallbackCrops);
     }
   };
 
@@ -725,7 +739,7 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
         </div>
 
         {/* Crop Analysis Section */}
-        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        {/* <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div className="flex items-center mb-3">
             <Leaf className="h-5 w-5 text-yellow-600 mr-2" />
             <h3 className="text-lg font-medium text-gray-900">Crop Treatment</h3>
@@ -771,7 +785,7 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Soil Parameters Section Header */}
         <div className="flex items-center mb-4 mt-4">

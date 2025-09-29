@@ -181,6 +181,419 @@ async def get_rotation_plan(crop: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating rotation plan: {str(e)}")
 
+@app.get("/api/crops")
+async def get_crops():
+    """Get list of available crops for treatment analysis"""
+    try:
+        # Get list of crops from the economic dataset
+        crop_list = crop_service.economic_df.index.tolist()
+        return {"crops": crop_list}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching crops: {str(e)}")
+
+# New Crop Analysis Endpoints
+class CropAnalysisRequest(BaseModel):
+    selected_crop: str
+    soil_parameters: Dict
+    farm_size_hectares: float = 1.0
+
+@app.post("/api/analyze-crop")
+async def analyze_crop(request: CropAnalysisRequest):
+    """Analyze crop suitability and provide basic treatment recommendations"""
+    try:
+        crop_name = request.selected_crop
+        soil_params = request.soil_parameters
+        
+        # Basic crop analysis - check if the crop would be recommended
+        recommendations = crop_service.get_crop_recommendations(soil_params, 100000)  # High budget to get all crops
+        
+        # Find the selected crop in recommendations
+        selected_crop_data = None
+        for rec in recommendations:
+            if rec['crop'].lower() == crop_name.lower():
+                selected_crop_data = rec
+                break
+        
+        # Calculate realistic suitability score based on soil parameters
+        base_score = 50.0  # Base score
+        
+        # Score adjustments based on soil parameters
+        if selected_crop_data:
+            # Extract suitability score from agronomic_score (e.g., "75.23%" -> 75.23)
+            suitability_str = selected_crop_data['agronomic_score'].replace('%', '')
+            suitability_score = float(suitability_str)
+        else:
+            # If crop not found in recommendations, calculate based on soil parameters
+            suitability_score = base_score
+            
+            # Adjust score based on parameter ranges
+            param_scores = []
+            
+            # N parameter (optimal: 40-80)
+            n_val = soil_params.get('N', 60)
+            if 40 <= n_val <= 80:
+                param_scores.append(90)
+            elif 30 <= n_val <= 90:
+                param_scores.append(75)
+            else:
+                param_scores.append(50)
+            
+            # P parameter (optimal: 30-60) 
+            p_val = soil_params.get('P', 45)
+            if 30 <= p_val <= 60:
+                param_scores.append(90)
+            elif 20 <= p_val <= 70:
+                param_scores.append(75)
+            else:
+                param_scores.append(50)
+                
+            # K parameter (optimal: 40-80)
+            k_val = soil_params.get('K', 60)
+            if 40 <= k_val <= 80:
+                param_scores.append(90)
+            elif 30 <= k_val <= 90:
+                param_scores.append(75)
+            else:
+                param_scores.append(50)
+                
+            # pH parameter (optimal: 6.0-7.5)
+            ph_val = soil_params.get('ph', 6.5)
+            if 6.0 <= ph_val <= 7.5:
+                param_scores.append(95)
+            elif 5.5 <= ph_val <= 8.0:
+                param_scores.append(80)
+            else:
+                param_scores.append(60)
+                
+            # Temperature parameter (crop-specific but generally 20-35°C)
+            temp_val = soil_params.get('temperature', 25)
+            if 20 <= temp_val <= 30:
+                param_scores.append(90)
+            elif 15 <= temp_val <= 35:
+                param_scores.append(75)
+            else:
+                param_scores.append(60)
+                
+            # Calculate average score
+            if param_scores:
+                suitability_score = sum(param_scores) / len(param_scores)
+            else:
+                suitability_score = base_score
+        
+        # Determine if suitable (threshold: 60%)
+        is_suitable = suitability_score >= 60.0
+        
+        # Generate basic parameter analysis
+        parameter_analysis = {}
+        for param, value in soil_params.items():
+            if param in ['N', 'P', 'K']:
+                # Nutrient analysis
+                if value < 40:
+                    status = "low"
+                elif value > 80:
+                    status = "high" 
+                else:
+                    status = "optimal"
+                    
+                parameter_analysis[param] = {
+                    "current": f"{value} kg/ha",
+                    "optimal": "40-80 kg/ha",
+                    "range": "40-80 kg/ha",
+                    "status": status
+                }
+            elif param == 'ph':
+                if value < 6.0:
+                    status = "acidic"
+                elif value > 7.5:
+                    status = "alkaline"
+                else:
+                    status = "optimal"
+                    
+                parameter_analysis[param] = {
+                    "current": f"{value} pH",
+                    "optimal": "6.0-7.5 pH",
+                    "range": "6.0-7.5 pH", 
+                    "status": status
+                }
+            elif param == 'temperature':
+                if value < 20:
+                    status = "low"
+                elif value > 35:
+                    status = "high"
+                else:
+                    status = "optimal"
+                    
+                parameter_analysis[param] = {
+                    "current": f"{value}°C",
+                    "optimal": "20-35°C",
+                    "range": "20-35°C",
+                    "status": status
+                }
+        
+        return {
+            "analysis": {
+                "suitability_score": suitability_score,
+                "overall_suitability": suitability_score,  # Keep for backward compatibility
+                "is_suitable": is_suitable,
+                "parameter_analysis": parameter_analysis
+            },
+            "needs_treatment": not is_suitable
+        }
+        
+    except Exception as e:
+        print(f"Error in analyze_crop: {e}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing crop: {str(e)}")
+
+@app.post("/api/analyze-crop-detailed")
+async def analyze_crop_detailed(request: CropAnalysisRequest):
+    """Get comprehensive crop analysis with improvement plan and cost analysis"""
+    try:
+        # First get basic analysis
+        basic_analysis = await analyze_crop(request)
+        
+        # Add detailed analysis components
+        detailed_result = basic_analysis.copy()
+        
+        # Update the suitability score key for frontend compatibility
+        if "overall_suitability" in detailed_result["analysis"]:
+            detailed_result["analysis"]["suitability_score"] = detailed_result["analysis"]["overall_suitability"]
+        
+        # Generate detailed parameter analysis with recommendations
+        soil_params = request.soil_parameters
+        parameter_analysis = {}
+        
+        for param, value in soil_params.items():
+            if param == 'N':
+                optimal_min, optimal_max = 40, 80
+                if optimal_min <= value <= optimal_max:
+                    status = "optimal"
+                    recommendation = None
+                elif value < optimal_min:
+                    status = "low"
+                    recommendation = f"Apply nitrogen fertilizer to increase N levels by {optimal_min - value} kg/ha"
+                else:
+                    status = "high"
+                    recommendation = f"Reduce nitrogen input by {value - optimal_max} kg/ha to avoid leaching"
+                    
+                parameter_analysis[param] = {
+                    "current": value,
+                    "optimal_range": f"{optimal_min}-{optimal_max} kg/ha",
+                    "status": status,
+                    "recommendation": recommendation
+                }
+                
+            elif param == 'P':
+                optimal_min, optimal_max = 30, 60
+                if optimal_min <= value <= optimal_max:
+                    status = "optimal"
+                    recommendation = None
+                elif value < optimal_min:
+                    status = "low"
+                    recommendation = f"Apply phosphatic fertilizer to increase P levels by {optimal_min - value} kg/ha"
+                else:
+                    status = "high"
+                    recommendation = f"Reduce phosphorus input by {value - optimal_max} kg/ha"
+                    
+                parameter_analysis[param] = {
+                    "current": value,
+                    "optimal_range": f"{optimal_min}-{optimal_max} kg/ha",
+                    "status": status,
+                    "recommendation": recommendation
+                }
+                
+            elif param == 'K':
+                optimal_min, optimal_max = 40, 80
+                if optimal_min <= value <= optimal_max:
+                    status = "optimal"
+                    recommendation = None
+                elif value < optimal_min:
+                    status = "low"
+                    recommendation = f"Apply potash fertilizer to increase K levels by {optimal_min - value} kg/ha"
+                else:
+                    status = "high"
+                    recommendation = f"Reduce potassium input by {value - optimal_max} kg/ha"
+                    
+                parameter_analysis[param] = {
+                    "current": value,
+                    "optimal_range": f"{optimal_min}-{optimal_max} kg/ha",
+                    "status": status,
+                    "recommendation": recommendation
+                }
+                
+            elif param == 'ph':
+                optimal_min, optimal_max = 6.0, 7.5
+                if optimal_min <= value <= optimal_max:
+                    status = "optimal"
+                    recommendation = None
+                elif value < optimal_min:
+                    status = "acidic"
+                    recommendation = f"Apply lime to increase pH by {optimal_min - value:.1f} units"
+                else:
+                    status = "alkaline"
+                    recommendation = f"Apply sulfur to decrease pH by {value - optimal_max:.1f} units"
+                    
+                parameter_analysis[param] = {
+                    "current": value,
+                    "optimal_range": f"{optimal_min}-{optimal_max}",
+                    "status": status,
+                    "recommendation": recommendation
+                }
+                
+            elif param == 'temperature':
+                optimal_min, optimal_max = 20, 30
+                if optimal_min <= value <= optimal_max:
+                    status = "optimal"
+                    recommendation = None
+                elif value < optimal_min:
+                    status = "low"
+                    recommendation = "Consider greenhouse cultivation or seasonal timing adjustment"
+                else:
+                    status = "high"
+                    recommendation = "Provide shade or cooling systems during hot periods"
+                    
+                parameter_analysis[param] = {
+                    "current": value,
+                    "optimal_range": f"{optimal_min}-{optimal_max}°C",
+                    "status": status,
+                    "recommendation": recommendation
+                }
+                
+            elif param == 'humidity':
+                optimal_min, optimal_max = 50, 80
+                if optimal_min <= value <= optimal_max:
+                    status = "optimal"
+                    recommendation = None
+                elif value < optimal_min:
+                    status = "low"
+                    recommendation = "Increase irrigation frequency to maintain soil moisture"
+                else:
+                    status = "high" 
+                    recommendation = "Improve drainage and air circulation to reduce humidity"
+                    
+                parameter_analysis[param] = {
+                    "current": value,
+                    "optimal_range": f"{optimal_min}-{optimal_max}%",
+                    "status": status,
+                    "recommendation": recommendation
+                }
+                
+            elif param == 'rainfall':
+                optimal_min, optimal_max = 50, 200
+                if optimal_min <= value <= optimal_max:
+                    status = "optimal"
+                    recommendation = None
+                elif value < optimal_min:
+                    status = "low"
+                    recommendation = "Install irrigation system to supplement rainfall"
+                else:
+                    status = "high"
+                    recommendation = "Ensure proper drainage to prevent waterlogging"
+                    
+                parameter_analysis[param] = {
+                    "current": value,
+                    "optimal_range": f"{optimal_min}-{optimal_max}mm",
+                    "status": status,
+                    "recommendation": recommendation
+                }
+        
+        # Update parameter analysis in result
+        detailed_result["analysis"]["parameter_analysis"] = parameter_analysis
+        
+        # Generate structured improvement plan
+        improvements = []
+        needs_improvement = False
+        
+        for param, analysis in parameter_analysis.items():
+            if analysis["status"] != "optimal" and analysis["recommendation"]:
+                needs_improvement = True
+                priority = "High" if analysis["status"] in ["low", "high"] else "Medium"
+                
+                improvement = {
+                    "parameter": param.upper(),
+                    "issue": f"Current level: {analysis['current']} (status: {analysis['status']})",
+                    "solution": analysis["recommendation"],
+                    "priority": priority
+                }
+                improvements.append(improvement)
+        
+        if needs_improvement:
+            detailed_result["improvement_plan"] = {
+                "improvements": improvements,
+                "summary": f"Found {len(improvements)} parameters that need adjustment for optimal {request.selected_crop} cultivation."
+            }
+        else:
+            detailed_result["improvement_plan"] = {
+                "message": f"Excellent! Your soil conditions are already optimal for {request.selected_crop} cultivation."
+            }
+        
+        # Generate structured cost analysis
+        farm_size = request.farm_size_hectares
+        cost_breakdown = []
+        total_cost = 0
+        
+        if needs_improvement:
+            # Calculate costs based on needed improvements
+            for improvement in improvements:
+                param = improvement["parameter"].lower()
+                if param in ['n', 'p', 'k']:
+                    cost = 8000 * farm_size  # Fertilizer cost per hectare
+                    cost_breakdown.append({
+                        "item": f"{param.upper()} Fertilizer",
+                        "cost": cost
+                    })
+                    total_cost += cost
+                elif param == 'ph':
+                    cost = 4000 * farm_size  # pH correction cost per hectare
+                    cost_breakdown.append({
+                        "item": "pH Correction (Lime/Sulfur)",
+                        "cost": cost
+                    })
+                    total_cost += cost
+            
+            # Add base costs
+            base_costs = [
+                {"item": "Seeds", "cost": 3000 * farm_size},
+                {"item": "Labor", "cost": 5000 * farm_size},
+                {"item": "Equipment/Tools", "cost": 2000 * farm_size}
+            ]
+            
+            for cost_item in base_costs:
+                cost_breakdown.append(cost_item)
+                total_cost += cost_item["cost"]
+                
+            detailed_result["cost_analysis"] = {
+                "breakdown": cost_breakdown,
+                "total_cost": total_cost,
+                "farm_size_hectares": farm_size,
+                "cost_per_hectare": total_cost / farm_size if farm_size > 0 else 0
+            }
+        else:
+            # Minimal maintenance costs for optimal conditions
+            maintenance_costs = [
+                {"item": "Seeds", "cost": 3000 * farm_size},
+                {"item": "Maintenance Fertilizer", "cost": 4000 * farm_size},
+                {"item": "Labor", "cost": 4000 * farm_size},
+                {"item": "Equipment/Tools", "cost": 1500 * farm_size}
+            ]
+            
+            for cost_item in maintenance_costs:
+                cost_breakdown.append(cost_item)
+                total_cost += cost_item["cost"]
+                
+            detailed_result["cost_analysis"] = {
+                "breakdown": cost_breakdown,
+                "total_cost": total_cost,
+                "farm_size_hectares": farm_size,
+                "cost_per_hectare": total_cost / farm_size if farm_size > 0 else 0,
+                "message": f"Minimal investment required - your soil is already optimal for {request.selected_crop}!"
+            }
+        
+        return detailed_result
+        
+    except Exception as e:
+        print(f"Error in analyze_crop_detailed: {e}")
+        raise HTTPException(status_code=500, detail=f"Error in detailed analysis: {str(e)}")
+
 @app.get("/api/soil-weather-data/{latitude}/{longitude}")
 async def get_soil_weather_data(latitude: float, longitude: float):
     """Get combined soil and weather data for location-based form auto-fill"""
