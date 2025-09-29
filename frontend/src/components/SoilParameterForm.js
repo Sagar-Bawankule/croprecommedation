@@ -2,6 +2,64 @@ import React, { useState, useEffect } from 'react';
 import { MapPin, Thermometer, Droplets, Beaker, Leaf, DollarSign } from 'lucide-react';
 import { getLocationAsync, validateSoilParameters, formatCurrency } from '../utils/helpers';
 import { cropAPI } from '../services/api';
+import './FormattedContent.css';
+
+// Enhanced markdown formatter for Gemini responses
+const formatMarkdownText = (text) => {
+  if (!text) return text;
+  
+  return text
+    // Convert headers with better styling
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Convert bold text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Convert bullet points with better formatting
+    .replace(/^\s*\*\s+(.+)$/gm, '<li>• $1</li>')
+    .replace(/^\s*-\s+(.+)$/gm, '<li>• $1</li>')
+    // Convert numbered lists
+    .replace(/^\s*\d+\.\s+(.+)$/gm, '<li style="list-style-type: decimal; margin-left: 1.5rem;">$1</li>')
+    // Highlight currency amounts
+    .replace(/(₹[\d,]+)/g, '<strong style="color: #059669; background-color: rgba(16, 185, 129, 0.1); padding: 2px 4px; border-radius: 3px;">$1</strong>')
+    // Highlight percentages
+    .replace(/(\d+%)/g, '<strong style="color: #7c3aed; background-color: rgba(124, 58, 237, 0.1); padding: 2px 4px; border-radius: 3px;">$1</strong>')
+    // Highlight important sections with specific keywords
+    .replace(/(\*\*Total.*?\*\*:)/g, '<div style="background-color: rgba(16, 185, 129, 0.1); padding: 8px; border-left: 4px solid #10b981; margin: 8px 0; border-radius: 4px;"><strong style="color: #065f46;">$1</strong></div>')
+    .replace(/(\*\*Expected.*?\*\*:)/g, '<div style="background-color: rgba(59, 130, 246, 0.1); padding: 8px; border-left: 4px solid #3b82f6; margin: 8px 0; border-radius: 4px;"><strong style="color: #1e40af;">$1</strong></div>')
+    // Convert line breaks with proper spacing
+    .replace(/\n\n\n/g, '<div style="margin: 12px 0;"></div>')
+    .replace(/\n\n/g, '<div style="margin: 8px 0;"></div>')
+    .replace(/\n/g, '<br>')
+    // Clean up and organize content
+    .replace(/---/g, '<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;">')
+    // Add spacing around headers
+    .replace(/<h([123])>/g, '<h$1 style="margin-top: 16px; margin-bottom: 8px;">')
+    // Improve list formatting
+    .replace(/(<li>.*?<\/li>)/gs, (match) => {
+      return match.replace(/<li>/g, '<li style="margin-bottom: 4px; line-height: 1.5;">');
+    });
+};
+
+// Component to render formatted markdown
+const FormattedMarkdown = ({ content, className = '' }) => {
+  if (!content) return <div className="text-gray-500 italic">No content available</div>;
+  
+  const formattedContent = formatMarkdownText(content);
+  
+  return (
+    <div 
+      className={`formatted-content bg-white rounded-lg p-4 shadow-sm border border-gray-200 ${className}`}
+      dangerouslySetInnerHTML={{ __html: formattedContent }}
+      style={{
+        lineHeight: '1.7',
+        wordBreak: 'break-word',
+        maxHeight: '500px',
+        overflowY: 'auto'
+      }}
+    />
+  );
+};
 
 const SoilParameterForm = ({ onSubmit, loading }) => {
   const [formData, setFormData] = useState({
@@ -15,6 +73,12 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
     budget_per_hectare: '',
     farm_size_hectares: '1'
   });
+  
+  // New state for crop analysis feature
+  const [selectedCrop, setSelectedCrop] = useState('');
+  const [cropList, setCropList] = useState([]);
+  const [showCropAnalysis, setShowCropAnalysis] = useState(false);
+  const [cropAnalysisResult, setCropAnalysisResult] = useState(null);
   
   const [location, setLocation] = useState(null);
   const [locationName, setLocationName] = useState('');
@@ -33,7 +97,20 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
   useEffect(() => {
     // Note: Removed auto-location on mount to avoid permission prompts
     // Users should explicitly click "Get My Location" button
+    
+    // Fetch crop list for analysis feature
+    fetchCropList();
   }, []);
+
+  const fetchCropList = async () => {
+    try {
+      const response = await fetch('/api/crops');
+      const data = await response.json();
+      setCropList(data.crops || []);
+    } catch (error) {
+      console.error('Error fetching crop list:', error);
+    }
+  };
 
   const handleGetLocation = async () => {
     try {
@@ -262,6 +339,64 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
       silt_content: Math.round(silt * 10) / 10,
       organic_carbon: 1.5 + Math.random() * 2 // 1.5-3.5%
     };
+  };
+
+  const handleCropAnalysis = async (detailedAnalysis = true) => {
+    if (!selectedCrop) {
+      alert('Please select a crop for analysis');
+      return;
+    }
+
+    const soilParams = {
+      N: parseFloat(formData.N),
+      P: parseFloat(formData.P),
+      K: parseFloat(formData.K),
+      temperature: parseFloat(formData.temperature),
+      humidity: parseFloat(formData.humidity),
+      ph: parseFloat(formData.ph),
+      rainfall: parseFloat(formData.rainfall)
+    };
+
+    const validation = validateSoilParameters(soilParams);
+    if (!validation.isValid) {
+      setErrors(validation.errors);
+      return;
+    }
+
+    try {
+      // Use detailed analysis endpoint for comprehensive results
+      const endpoint = detailedAnalysis ? '/api/analyze-crop-detailed' : '/api/analyze-crop';
+      
+      const requestBody = {
+        selected_crop: selectedCrop,
+        soil_parameters: soilParams
+      };
+      
+      // Add farm size for detailed analysis
+      if (detailedAnalysis) {
+        requestBody.farm_size_hectares = parseFloat(formData.farm_size_hectares) || 1;
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to analyze crop');
+      }
+
+      const result = await response.json();
+      console.log('Crop Analysis Result:', result); // Debug log
+      setCropAnalysisResult(result);
+      setShowCropAnalysis(true);
+    } catch (error) {
+      console.error('Error analyzing crop:', error);
+      alert('Error analyzing crop. Please try again.');
+    }
   };
 
   const handleSubmit = (e) => {
@@ -589,6 +724,55 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
           )}
         </div>
 
+        {/* Crop Analysis Section */}
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center mb-3">
+            <Leaf className="h-5 w-5 text-yellow-600 mr-2" />
+            <h3 className="text-lg font-medium text-gray-900">Crop Treatment</h3>
+          </div>
+          <p className="text-sm text-gray-600 mb-3">
+            Select a specific crop to assess if your soil conditions are suitable, and get AI-powered treatment recommendations if needed.
+          </p>
+          
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Crop for Treatment
+              </label>
+              <select
+                value={selectedCrop}
+                onChange={(e) => setSelectedCrop(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              >
+                <option value="">-- Choose a crop --</option>
+                {cropList.map((crop) => (
+                  <option key={crop} value={crop}>
+                    {crop.charAt(0).toUpperCase() + crop.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleCropAnalysis(false)}
+                disabled={!selectedCrop || loading}
+                className="px-3 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors disabled:bg-yellow-400 disabled:cursor-not-allowed text-sm"
+              >
+                {loading ? 'Analyzing...' : 'Quick Treatment'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCropAnalysis(true)}
+                disabled={!selectedCrop || loading}
+                className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed text-sm font-medium"
+              >
+                {loading ? 'Analyzing...' : 'Detailed Treatment + Costs'}
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Soil Parameters Section Header */}
         <div className="flex items-center mb-4 mt-4">
           <Beaker className="h-5 w-5 text-green-600 mr-2" />
@@ -883,6 +1067,168 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
               <p>Type: {debugData?.data?.soil_details?.soil_type}</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Crop Treatment Results */}
+      {showCropAnalysis && cropAnalysisResult && (
+        <div className="mt-6 p-6 bg-white border border-gray-200 rounded-lg shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-900">
+              Crop Treatment Results: {selectedCrop.charAt(0).toUpperCase() + selectedCrop.slice(1)}
+            </h3>
+            <button
+              onClick={() => setShowCropAnalysis(false)}
+              className="text-gray-500 hover:text-gray-700 text-xl"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Suitability Score */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-medium">Suitability Score</span>
+              <span className="text-lg font-bold">
+                {(cropAnalysisResult.analysis?.overall_suitability || cropAnalysisResult.overall_suitability)}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3">
+              <div
+                className={`h-3 rounded-full ${
+                  (cropAnalysisResult.analysis?.overall_suitability || cropAnalysisResult.overall_suitability) >= 80
+                    ? 'bg-green-500'
+                    : (cropAnalysisResult.analysis?.overall_suitability || cropAnalysisResult.overall_suitability) >= 60
+                    ? 'bg-yellow-500'
+                    : 'bg-red-500'
+                }`}
+                style={{ width: `${(cropAnalysisResult.analysis?.overall_suitability || cropAnalysisResult.overall_suitability)}%` }}
+              ></div>
+            </div>
+            <p className="text-sm mt-2">
+              {(cropAnalysisResult.analysis?.is_suitable !== undefined ? cropAnalysisResult.analysis.is_suitable : cropAnalysisResult.is_suitable)
+                ? '✅ Your soil conditions are suitable for this crop!'
+                : '⚠️ Your soil conditions need improvement for optimal growth.'}
+            </p>
+          </div>
+
+          {/* Parameter Analysis */}
+          <div className="mb-6">
+            <h4 className="font-semibold mb-3">Parameter Assessment</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Object.entries(cropAnalysisResult.analysis?.parameter_analysis || cropAnalysisResult.parameter_analysis || {}).map(([param, analysis]) => (
+                <div key={param} className="p-3 border rounded-lg">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-medium">{param.toUpperCase()}</span>
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      analysis.status === 'optimal' ? 'bg-green-100 text-green-800' :
+                      analysis.status === 'acceptable' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {analysis.status}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    <p>Current: {analysis.current}</p>
+                    <p>Optimal: {analysis.optimal}</p>
+                    <p>Range: {analysis.range}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Enhanced Analysis Results */}
+          {(cropAnalysisResult.improvement_plan || cropAnalysisResult.cost_analysis) && (
+            <div className="mb-6">
+              {/* Improvement Plan */}
+              {cropAnalysisResult.improvement_plan && cropAnalysisResult.improvement_plan.improvement_plan && (
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="font-semibold mb-3 text-blue-900">🌱 Detailed Improvement Plan</h4>
+                  <div className="text-sm text-blue-800 max-h-96 overflow-y-auto">
+                    <FormattedMarkdown 
+                      content={cropAnalysisResult.improvement_plan.improvement_plan}
+                      className="text-blue-800"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Cost Analysis */}
+              {cropAnalysisResult.cost_analysis && cropAnalysisResult.cost_analysis.cost_analysis && (
+                <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <h4 className="font-semibold mb-3 text-green-900">💰 Cost Analysis & Investment Plan</h4>
+                  <div className="text-sm text-green-800 max-h-96 overflow-y-auto">
+                    <FormattedMarkdown 
+                      content={cropAnalysisResult.cost_analysis.cost_analysis}
+                      className="text-green-800"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Error Messages */}
+              {cropAnalysisResult.improvement_plan && cropAnalysisResult.improvement_plan.error && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <h4 className="font-semibold mb-3 text-red-900">⚠️ Improvement Plan Error</h4>
+                  <p className="text-sm text-red-800">
+                    {cropAnalysisResult.improvement_plan.error}
+                  </p>
+                </div>
+              )}
+
+              {cropAnalysisResult.cost_analysis && cropAnalysisResult.cost_analysis.error && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <h4 className="font-semibold mb-3 text-red-900">⚠️ Cost Analysis Error</h4>
+                  <p className="text-sm text-red-800">
+                    {cropAnalysisResult.cost_analysis.error}
+                  </p>
+                </div>
+              )}
+
+              {/* Messages for no improvements needed */}
+              {cropAnalysisResult.improvement_plan && cropAnalysisResult.improvement_plan.message && (
+                <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <h4 className="font-semibold mb-3 text-green-900">✅ Status Update</h4>
+                  <p className="text-sm text-green-800">
+                    {cropAnalysisResult.improvement_plan.message}
+                  </p>
+                </div>
+              )}
+
+              {cropAnalysisResult.cost_analysis && cropAnalysisResult.cost_analysis.message && (
+                <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <h4 className="font-semibold mb-3 text-green-900">💰 Cost Status</h4>
+                  <p className="text-sm text-green-800">
+                    {cropAnalysisResult.cost_analysis.message}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Legacy Treatment Plan (for backward compatibility) */}
+          {cropAnalysisResult.treatment_plan && !cropAnalysisResult.improvement_plan && (
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h4 className="font-semibold mb-3 text-blue-900">🔧 AI Treatment Plan</h4>
+              <div className="text-sm text-blue-800">
+                <FormattedMarkdown 
+                  content={cropAnalysisResult.treatment_plan}
+                  className="text-blue-800"
+                />
+              </div>
+            </div>
+          )}
+          
+          {/* Success message for suitable conditions */}
+          {cropAnalysisResult.analysis && cropAnalysisResult.analysis.is_suitable && !cropAnalysisResult.improvement_plan && (
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-green-800">
+                🎉 Great! Your soil conditions are already suitable for growing {selectedCrop}. 
+                Continue with your current practices and monitor regularly.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
