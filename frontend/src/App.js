@@ -15,11 +15,13 @@ function App() {
   const [apiStatus, setApiStatus] = useState('checking');
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState('');
+  const [locationLoading, setLocationLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('recommendations'); // 'recommendations' or 'treatment'
 
   useEffect(() => {
     checkApiHealth();
-    getUserLocation();
+    // Don't auto-request location, but use a placeholder until user provides one
+    setLocationPlaceholder();
   }, []);
 
   const checkApiHealth = async () => {
@@ -32,8 +34,20 @@ function App() {
     }
   };
 
+  // Set a placeholder location until user provides one
+  const setLocationPlaceholder = () => {
+    // This is just a placeholder, not used for actual analysis
+    // User will need to provide a real location
+    setUserLocation(null);
+    console.log('Waiting for user to provide location');
+  };
+
+  // Get user's current GPS location when requested
   const getUserLocation = () => {
     if (navigator.geolocation) {
+      setLocationLoading(true);
+      setLocationError('');
+      
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setUserLocation({
@@ -41,30 +55,23 @@ function App() {
             longitude: position.coords.longitude
           });
           setLocationError('');
+          setLocationLoading(false);
           console.log('User location obtained:', position.coords.latitude, position.coords.longitude);
         },
         (error) => {
           console.error('Error getting location:', error);
-          setLocationError('Unable to get your location. Using default location.');
-          // Set a default location (e.g., center of India) instead of 0,0
-          setUserLocation({
-            latitude: 20.5937,
-            longitude: 78.9629
-          });
+          setLocationError('Unable to access your GPS location. Please enter a location manually.');
+          setLocationLoading(false);
+          // Don't set a default location - let the user enter one manually
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
+          timeout: 10000, // 10 second timeout
           maximumAge: 60000
         }
       );
     } else {
-      setLocationError('Geolocation is not supported by this browser.');
-      // Set a default location (center of India)
-      setUserLocation({
-        latitude: 20.5937,
-        longitude: 78.9629
-      });
+      setLocationError('Geolocation is not supported by this browser. Please enter a location manually.');
     }
   };
 
@@ -182,28 +189,43 @@ function App() {
         {!recommendationData && (
           <div className="mb-8">
             <div className="bg-white rounded-lg shadow-sm p-2">
-              <div className="flex space-x-2">
+              <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2">
+                <div className="flex space-x-2 flex-grow">
+                  <button
+                    onClick={() => setActiveTab('recommendations')}
+                    className={`flex-1 px-6 py-3 rounded-md font-medium transition-colors flex items-center justify-center ${
+                      activeTab === 'recommendations'
+                        ? 'bg-green-600 text-white shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                  >
+                    <BarChart3 className="h-5 w-5 mr-2" />
+                    Crop Recommendations
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('treatment')}
+                    className={`flex-1 px-6 py-3 rounded-md font-medium transition-colors flex items-center justify-center ${
+                      activeTab === 'treatment'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Stethoscope className="h-5 w-5 mr-2" />
+                    Crop Treatment Analysis
+                  </button>
+                </div>
+                
+                {/* Location Button */}
                 <button
-                  onClick={() => setActiveTab('recommendations')}
-                  className={`flex-1 px-6 py-3 rounded-md font-medium transition-colors flex items-center justify-center ${
-                    activeTab === 'recommendations'
-                      ? 'bg-green-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
+                  onClick={getUserLocation}
+                  disabled={locationLoading}
+                  className="px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-400 flex items-center justify-center"
                 >
-                  <BarChart3 className="h-5 w-5 mr-2" />
-                  Crop Recommendations
-                </button>
-                <button
-                  onClick={() => setActiveTab('treatment')}
-                  className={`flex-1 px-6 py-3 rounded-md font-medium transition-colors flex items-center justify-center ${
-                    activeTab === 'treatment'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                >
-                  <Stethoscope className="h-5 w-5 mr-2" />
-                  Crop Treatment Analysis
+                  {locationLoading ? (
+                    <>🔄 Getting Location...</>
+                  ) : (
+                    <>🌍 Get My GPS Location</>
+                  )}
                 </button>
               </div>
             </div>
