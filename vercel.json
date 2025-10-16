@@ -1,7 +1,7 @@
 {
   "version": 2,
   "name": "crop-recommendation-system",
-  "buildCommand": "cd frontend && npm install && npm run build",
+  "buildCommand": "cd frontend && npm install --no-package-lock && npm run build",
   "outputDirectory": "frontend/build",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "github": {
