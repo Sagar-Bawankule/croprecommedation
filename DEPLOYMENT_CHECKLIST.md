@@ -7,6 +7,8 @@
 - [x] Environment files configured
 - [x] Backend deployment guides created
 - [x] CORS settings documented
+- [x] Unused dependencies removed (@radix-ui)
+- [x] Deployment scripts enhanced
 
 ## 🚀 Deployment Steps
 
@@ -22,6 +24,14 @@ Backend URL: https://your-backend-name.railway.app
 ```
 
 ### Step 2: Deploy Frontend to Vercel
+
+#### Option A: Using Automated Script (Recommended)
+```bash
+# Run the deployment script from project root
+deploy-to-vercel.bat
+```
+
+#### Option B: Manual Deployment
 ```bash
 # Install Vercel CLI (if not installed)
 npm install -g vercel
@@ -61,23 +71,13 @@ vercel --prod
 {
   "version": 2,
   "name": "crop-recommendation-system",
-  "builds": [
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/frontend/build/$1"
-    }
-  ],
+  "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/build",
-  "installCommand": "cd frontend && npm install",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "github": {
+    "silent": true,
+    "autoJobCancelation": true
+  }
   "buildCommand": "cd frontend && npm run build"
 }
 ```
@@ -141,10 +141,20 @@ npm run build
 3. Test API endpoints directly
 4. Check browser console for errors
 
+#### Dependency Errors
+1. Check for unused dependencies in package.json
+2. If you see "@radix-ui" errors but don't use these components, remove them:
+   ```bash
+   cd frontend
+   npm uninstall @radix-ui/react-button @radix-ui/react-dropdown-menu @radix-ui/react-icons
+   ```
+3. Check for other missing or conflicting dependencies
+
 #### Deployment Failures
 1. Check Vercel deployment logs
 2. Verify build commands in `vercel.json`
-3. Ensure Node.js version compatibility
+3. Ensure Node.js version compatibility 
+4. Try our enhanced deployment script: `deploy-to-vercel.bat`
 
 ### Debug Commands:
 ```bash

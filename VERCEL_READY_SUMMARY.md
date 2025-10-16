@@ -5,11 +5,12 @@ Your Crop Recommendation System is now **100% ready for Vercel deployment**!
 ## ✅ What's Been Set Up
 
 ### Frontend (Vercel Deployment)
-- ✅ **vercel.json** - Optimized Vercel configuration
-- ✅ **Build tested** - Frontend builds successfully
+- ✅ **vercel.json** - Optimized Vercel configuration with proper build settings
+- ✅ **Build tested** - Frontend builds successfully without @radix-ui dependency errors
 - ✅ **Environment files** - Production and local configurations
-- ✅ **Package.json** - Cleaned up for deployment
+- ✅ **Package.json** - Cleaned up for deployment (removed unused @radix-ui dependencies)
 - ✅ **Static assets** - All properly configured
+- ✅ **SPA routing** - Configured with rewrites in vercel.json
 
 ### Backend (Separate Deployment)
 - ✅ **Procfile** - For Railway/Heroku deployment
@@ -18,25 +19,35 @@ Your Crop Recommendation System is now **100% ready for Vercel deployment**!
 - ✅ **CORS configured** - Ready for cross-origin requests
 
 ### Documentation
-- ✅ **VERCEL_DEPLOYMENT_GUIDE.md** - Step-by-step Vercel guide
+- ✅ **VERCEL_DEPLOYMENT_GUIDE.md** - Step-by-step Vercel guide (updated)
 - ✅ **BACKEND_DEPLOYMENT_GUIDE.md** - Multiple backend options
 - ✅ **DEPLOYMENT_CHECKLIST.md** - Complete deployment checklist
-- ✅ **Deployment scripts** - Automated preparation tools
+- ✅ **Deployment scripts** - Enhanced automated preparation tools
 
 ### Deployment Tools
-- ✅ **deploy-to-vercel.bat** - Windows deployment script
+- ✅ **deploy-to-vercel.bat** - Enhanced Windows deployment script with Vercel CLI integration
 - ✅ **deploy-to-vercel.sh** - Unix deployment script  
 - ✅ **prepare-deploy.js** - Node.js deployment helper
+
+## 🔄 Recent Updates
+- **Fixed dependency issues**: Removed unused @radix-ui packages causing build errors
+- **Enhanced deployment script**: Added Vercel CLI auto-install and deployment flow
+- **Improved vercel.json**: Added build command and optimized configuration
+- **Updated documentation**: Comprehensive troubleshooting section
 
 ## 🚀 How to Deploy (3 Steps)
 
 ### Step 1: Deploy Backend (5 minutes)
-1. Go to [Railway.app](https://railway.app)
+1. Go to [Railway.app](https://railway.app) or [Render.com](https://render.com)
 2. Connect GitHub → Select repo → Deploy `backend` folder
 3. Get your backend URL: `https://your-app.railway.app`
 
 ### Step 2: Deploy Frontend (2 minutes)
 ```bash
+# Run the enhanced deployment script
+deploy-to-vercel.bat
+
+# OR manually with Vercel CLI
 npm install -g vercel
 vercel --prod
 ```
@@ -47,21 +58,35 @@ In Vercel dashboard, set:
 REACT_APP_API_URL = https://your-backend-url.railway.app
 ```
 
-## 🎯 Your Live URLs
-- **Frontend**: `https://crop-recommendation.vercel.app`
-- **Backend**: `https://your-backend.railway.app`
+## 🎯 Your Live URLs (After Deployment)
+- **Frontend**: `https://crop-recommendation.vercel.app` (will be assigned by Vercel)
+- **Backend**: `https://your-backend.railway.app` (or your custom backend URL)
 - **API Docs**: `https://your-backend.railway.app/docs`
 
 ## 🔧 Deployment Architecture
 
 ```
 ┌─────────────────┐    API Calls    ┌──────────────────┐
-│   Vercel        │ ────────────►  │   Railway        │
+│   Vercel        │ ────────────►  │   Railway/Render │
 │   (Frontend)    │                │   (Backend)      │
 │   React App     │ ◄──────────── │   FastAPI        │
 │   Static Files  │    JSON Data   │   ML Models      │
 └─────────────────┘                └──────────────────┘
 ```
+
+## ❓ Troubleshooting Common Issues
+
+### Build Errors
+If you encounter build errors:
+- ✅ **Package.json issues fixed** - Removed problematic @radix-ui dependencies
+- ✅ **Node version** - Vercel uses Node 18+ by default (compatible)
+- ✅ **Build command verified** - Working in vercel.json configuration
+
+### API Connection Issues
+If frontend can't connect to backend:
+- ✅ Check REACT_APP_API_URL is set correctly in Vercel dashboard
+- ✅ Verify backend CORS settings allow requests from your Vercel domain
+- ✅ Test the backend API directly to ensure it's working correctly
 
 ## 💰 Cost Breakdown
 - **Vercel**: Free tier (perfect for this project)
@@ -69,12 +94,13 @@ REACT_APP_API_URL = https://your-backend-url.railway.app
 - **Total Monthly Cost**: **$0** 🎉
 
 ## 🧪 What's Tested
-- ✅ Frontend builds without errors
+- ✅ Frontend builds without dependency errors
 - ✅ All components compile correctly  
-- ✅ Vercel configuration validated
+- ✅ Vercel configuration validated with rewrites
 - ✅ Backend deployment files ready
 - ✅ Environment variables configured
 - ✅ CORS settings prepared
+- ✅ Deployment scripts enhanced and tested
 
 ## 📱 Features Ready for Production
 - ✅ **Responsive Design** - Works on all devices

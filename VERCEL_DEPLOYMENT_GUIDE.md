@@ -1,30 +1,50 @@
 # 🚀 Vercel Deployment Guide
 
-This guide will help you deploy your Crop Recommendation System to Vercel.
+This comprehensive guide will help you deploy your Crop Recommendation System to Vercel.
 
 ## 📋 Deployment Options
 
-### Option 1: Frontend Only on Vercel (Recommended)
-Deploy only the React frontend to Vercel and host the FastAPI backend separately.
+### Option 1: Automated Deployment Script (Recommended)
+Use our provided deployment script to automate the process:
 
-### Option 2: Separate Backend Deployment
-Deploy the backend to Railway, Render, or PythonAnywhere.
+```bash
+# Run from project root directory
+./deploy-to-vercel.bat
+```
+
+### Option 2: Manual Deployment Steps
+Follow the manual steps outlined below for more control over the deployment.
 
 ## 🛠️ Pre-Deployment Setup
 
-### 1. Install Vercel CLI
+### 1. Install Node.js and NPM
+Make sure you have [Node.js](https://nodejs.org/) installed on your system.
+
+### 2. Install Vercel CLI
 ```bash
 npm install -g vercel
 ```
 
-### 2. Login to Vercel
+### 3. Login to Vercel
 ```bash
 vercel login
 ```
 
-## 🚀 Deploy Frontend to Vercel
+## 🚀 Manual Deployment Steps
 
-### Step 1: Deploy
+### Step 1: Build Frontend
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Build the project
+npm run build
+```
+
+### Step 2: Deploy to Vercel
 ```bash
 # From project root directory
 vercel
@@ -37,17 +57,54 @@ vercel
 # - In which directory is your code located? ./frontend
 ```
 
-### Step 2: Set Environment Variables
-After deployment, go to your Vercel dashboard and add:
+### Step 3: Set Environment Variables
+After deployment, go to your Vercel dashboard:
 
-```
-REACT_APP_API_URL=https://your-backend-url.herokuapp.com
-```
+1. Navigate to your project
+2. Go to "Settings" > "Environment Variables"
+3. Add the following variable:
+   - Name: `REACT_APP_API_URL`
+   - Value: `https://your-backend-url.com` (your deployed backend URL)
+4. Save changes
 
-### Step 3: Redeploy
+### Step 4: Deploy to Production
 ```bash
 vercel --prod
 ```
+
+## 🔄 Updating Your Deployment
+
+Whenever you make changes to your code:
+
+1. Commit changes to your repository
+2. Run `deploy-to-vercel.bat` or follow the manual steps again
+
+## 🔧 Troubleshooting
+
+### Build Errors
+If you encounter build errors:
+
+1. Check the error messages in the Vercel console
+2. Verify your package.json has no missing or conflicting dependencies
+3. Check that your vercel.json configuration is correct
+4. Ensure all environment variables are properly set
+
+### 404 Not Found Errors
+For client-side routing issues:
+
+1. Verify the `rewrites` configuration in vercel.json is correct
+2. Ensure your React Router setup is properly configured
+
+### API Connection Issues
+If the frontend can't connect to the backend:
+
+1. Verify the REACT_APP_API_URL is correctly set in Vercel
+2. Check that your backend CORS settings allow requests from your Vercel domain
+3. Test the backend endpoint directly to ensure it's working
+
+## 🔗 Related Resources
+- [Backend Deployment Guide](./BACKEND_DEPLOYMENT_GUIDE.md)
+- [Vercel Documentation](https://vercel.com/docs)
 
 ## 🔧 Backend Deployment Options
 
