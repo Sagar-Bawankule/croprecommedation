@@ -39,35 +39,145 @@ export const getLocationAsync = () => {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
+    console.log('📍 Requesting HIGH ACCURACY GPS position (this may take 10-15 seconds)...');
+    console.log('⏳ Please wait for accurate GPS signal...');
+    
+    let watchId = null;
+    let hasResolved = false;
+    let positionsReceived = [];
+    let bestPosition = null;
+    
+    const cleanup = () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+    };
+
+    // Set a longer timeout to allow GPS to get accurate fix
+    const timeoutId = setTimeout(() => {
+      if (!hasResolved) {
+        cleanup();
+        
+        // If we got at least one position, use the best one
+        if (bestPosition) {
+          console.log('⚠️ Timeout reached, using best available position with accuracy:', bestPosition.coords.accuracy + 'm');
+          hasResolved = true;
+          const result = {
+            latitude: bestPosition.coords.latitude,
+            longitude: bestPosition.coords.longitude,
+            accuracy: bestPosition.coords.accuracy,
+            timestamp: bestPosition.timestamp
+          };
+          resolve(result);
+        } else {
+          reject(new Error('Location request timed out. Please try again or enter your location manually.'));
+        }
+      }
+    }, 30000); // 30 second timeout - longer to get accurate GPS
+
+    // Use watchPosition to monitor and get the MOST accurate position
+    watchId = navigator.geolocation.watchPosition(
       (position) => {
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
+        const accuracy = position.coords.accuracy;
+        positionsReceived.push({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: accuracy,
+          time: new Date().toLocaleTimeString()
         });
+        
+        console.log(`📡 GPS Update #${positionsReceived.length}:`, {
+          lat: position.coords.latitude.toFixed(6),
+          lng: position.coords.longitude.toFixed(6),
+          accuracy: accuracy.toFixed(1) + 'm',
+          time: new Date().toLocaleTimeString()
+        });
+        
+        // Keep track of best (most accurate) position
+        if (!bestPosition || accuracy < bestPosition.coords.accuracy) {
+          bestPosition = position;
+          console.log(`✨ New best accuracy: ${accuracy.toFixed(1)}m`);
+        }
+        
+        // Accept position if accuracy is good enough (under 50 meters)
+        // This prevents using inaccurate network-based location
+        if (accuracy <= 50 && !hasResolved) {
+          hasResolved = true;
+          clearTimeout(timeoutId);
+          cleanup();
+          
+          const result = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: position.timestamp,
+            updatesReceived: positionsReceived.length
+          };
+          
+          console.log('✅ ACCURATE GPS position obtained:', {
+            lat: result.latitude.toFixed(6),
+            lng: result.longitude.toFixed(6),
+            accuracy: result.accuracy.toFixed(1) + 'm',
+            updates: result.updatesReceived
+          });
+          
+          resolve(result);
+        }
+        
+        // If we've been trying for a while (10 updates) and haven't resolved,
+        // use the best position we have so far
+        if (positionsReceived.length >= 10 && !hasResolved) {
+          hasResolved = true;
+          clearTimeout(timeoutId);
+          cleanup();
+          
+          const result = {
+            latitude: bestPosition.coords.latitude,
+            longitude: bestPosition.coords.longitude,
+            accuracy: bestPosition.coords.accuracy,
+            timestamp: bestPosition.timestamp,
+            updatesReceived: positionsReceived.length
+          };
+          
+          console.log('⚠️ Using best position after 10 updates:', {
+            lat: result.latitude.toFixed(6),
+            lng: result.longitude.toFixed(6),
+            accuracy: result.accuracy.toFixed(1) + 'm',
+            updates: result.updatesReceived
+          });
+          
+          resolve(result);
+        }
       },
       (error) => {
-        let errorMessage = 'Unable to retrieve location.';
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location access denied. Please allow location access in your browser settings and try again, or enter your location manually.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information is unavailable. Please check your GPS/location services and try again, or enter your location manually.';
-            break;
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out. Please try again or enter your location manually.';
-            break;
-          default:
-            errorMessage = 'An unknown error occurred while getting location. Please try again or enter your location manually.';
+        if (!hasResolved) {
+          hasResolved = true;
+          clearTimeout(timeoutId);
+          cleanup();
+          
+          let errorMessage = 'Unable to retrieve location.';
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location access denied. Please allow location access in your browser settings and try again, or enter your location manually.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location information is unavailable. Please check your GPS/location services and try again, or enter your location manually.';
+              break;
+            case error.TIMEOUT:
+              errorMessage = 'Location request timed out. Please try again or enter your location manually.';
+              break;
+            default:
+              errorMessage = 'An unknown error occurred while getting location. Please try again or enter your location manually.';
+          }
+          console.error('❌ GPS Error:', errorMessage);
+          reject(new Error(errorMessage));
         }
-        reject(new Error(errorMessage));
       },
       {
-        enableHighAccuracy: true,
-        timeout: 15000, // Increased timeout to 15 seconds
-        maximumAge: 300000, // 5 minutes
+        enableHighAccuracy: true,    // CRITICAL: Force GPS, not network location
+        timeout: 27000,               // 27 seconds for each position attempt
+        maximumAge: 0                 // NEVER use cached position
       }
     );
   });

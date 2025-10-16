@@ -2,6 +2,25 @@
 
 A comprehensive web-based intelligent crop recommendation system that combines machine learning, real-time APIs, and data visualization to provide personalized farming recommendations.
 
+## 🚀 Live Demo
+
+- **Frontend**: Deploy to Vercel with one command
+- **Backend**: Deploy to Railway/Render for free
+- **Full Deployment Guide**: See `DEPLOYMENT_CHECKLIST.md`
+
+## 📦 Quick Deploy
+
+```bash
+# 1. Deploy Frontend to Vercel
+npm install -g vercel
+vercel --prod
+
+# 2. Deploy Backend to Railway
+# See BACKEND_DEPLOYMENT_GUIDE.md
+
+# 3. Set environment variables and you're live! 🎉
+```
+
 ## 🎯 Features
 
 ### Core Functionality

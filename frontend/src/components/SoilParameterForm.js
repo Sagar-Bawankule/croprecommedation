@@ -4,6 +4,227 @@ import { getLocationAsync, validateSoilParameters, formatCurrency } from '../uti
 import { cropAPI } from '../services/api';
 import './FormattedContent.css';
 
+// HTML5 Geolocation API Implementation
+const getLocationWithHTML5API = async () => {
+  return new Promise((resolve, reject) => {
+    console.log('📡 Using HTML5 Geolocation API...');
+    
+    // Check if geolocation is supported
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported by this browser'));
+      return;
+    }
+
+    let attempts = 0;
+    const maxAttempts = 3;
+
+
+    const tryGetPosition = (options, attemptNumber) => {
+      console.log(`🔄 Attempt ${attemptNumber}/${maxAttempts} with options:`, options);
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          console.log(`✅ HTML5 Geolocation success (attempt ${attemptNumber}):`, {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy + 'm',
+            altitude: position.coords.altitude,
+            altitudeAccuracy: position.coords.altitudeAccuracy,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
+            timestamp: new Date(position.timestamp).toLocaleTimeString()
+          });
+
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            altitude: position.coords.altitude,
+            altitudeAccuracy: position.coords.altitudeAccuracy,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
+            timestamp: position.timestamp,
+            source: `HTML5 Geolocation (attempt ${attemptNumber})`,
+            options: options
+          });
+        },
+        (error) => {
+          console.warn(`⚠️ HTML5 Geolocation attempt ${attemptNumber} failed:`, {
+            code: error.code,
+            message: error.message,
+            options: options
+          });
+
+          attempts++;
+          
+          // Try different options based on the error
+          if (attempts < maxAttempts) {
+            let nextOptions;
+            
+            if (error.code === 1) { // PERMISSION_DENIED
+              reject(new Error('Location permission denied by user'));
+              return;
+            } else if (error.code === 2) { // POSITION_UNAVAILABLE
+              // Try with less strict options
+              nextOptions = {
+                enableHighAccuracy: false,
+                timeout: 30000,
+                maximumAge: 60000 // Allow 1 minute old cache
+              };
+            } else if (error.code === 3) { // TIMEOUT
+              // Try with longer timeout and allow cache
+              nextOptions = {
+                enableHighAccuracy: true,
+                timeout: 60000,
+                maximumAge: 300000 // Allow 5 minutes old cache
+              };
+            }
+            
+            console.log(`� Retrying with different options...`);
+            setTimeout(() => tryGetPosition(nextOptions, attempts + 1), 1000);
+          } else {
+            reject(new Error(`HTML5 Geolocation failed after ${maxAttempts} attempts: ${error.message}`));
+          }
+        },
+        options
+      );
+    };
+
+    // Start with high accuracy options
+    const initialOptions = {
+      enableHighAccuracy: true,
+      timeout: 30000, // 30 seconds
+      maximumAge: 0   // No cache
+    };
+
+    tryGetPosition(initialOptions, 1);
+  });
+};
+
+const getLocationWithWatchPosition = async () => {
+  return new Promise((resolve, reject) => {
+    console.log('📡 Using HTML5 watchPosition for continuous monitoring...');
+    
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported'));
+      return;
+    }
+
+    let watchId;
+    let bestPosition = null;
+    let positionCount = 0;
+    const maxPositions = 5;
+    const timeoutDuration = 45000; // 45 seconds
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000, // 10 seconds per position attempt
+      maximumAge: 0
+    };
+
+    console.log('⏳ Starting position watch with options:', options);
+
+    watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        positionCount++;
+        
+        console.log(`📍 Position update #${positionCount}:`, {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy + 'm',
+          timestamp: new Date(position.timestamp).toLocaleTimeString()
+        });
+
+        // Track the best (most accurate) position
+        if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) {
+          bestPosition = position;
+          console.log(`✨ New best position found (accuracy: ${position.coords.accuracy}m)`);
+        }
+
+        // Accept position if accuracy is very good
+        if (position.coords.accuracy <= 50) {
+          console.log(`✅ Excellent accuracy achieved: ${position.coords.accuracy}m`);
+          navigator.geolocation.clearWatch(watchId);
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            altitude: position.coords.altitude,
+            timestamp: position.timestamp,
+            source: `HTML5 watchPosition (${positionCount} updates)`,
+            totalUpdates: positionCount
+          });
+          return;
+        }
+
+        // Stop after max positions and use best
+        if (positionCount >= maxPositions) {
+          console.log(`📊 Reached max positions (${maxPositions}), using best available`);
+          navigator.geolocation.clearWatch(watchId);
+          
+          if (bestPosition) {
+            resolve({
+              latitude: bestPosition.coords.latitude,
+              longitude: bestPosition.coords.longitude,
+              accuracy: bestPosition.coords.accuracy,
+              altitude: bestPosition.coords.altitude,
+              timestamp: bestPosition.timestamp,
+              source: `HTML5 watchPosition (best of ${positionCount})`,
+              totalUpdates: positionCount
+            });
+          } else {
+            reject(new Error('No valid position obtained'));
+          }
+        }
+      },
+      (error) => {
+        console.error('❌ HTML5 watchPosition error:', {
+          code: error.code,
+          message: error.message
+        });
+        
+        if (watchId) {
+          navigator.geolocation.clearWatch(watchId);
+        }
+        
+        if (bestPosition) {
+          console.log('📍 Using best position obtained before error');
+          resolve({
+            latitude: bestPosition.coords.latitude,
+            longitude: bestPosition.coords.longitude,
+            accuracy: bestPosition.coords.accuracy,
+            source: `HTML5 watchPosition (partial, ${positionCount} updates)`,
+            totalUpdates: positionCount
+          });
+        } else {
+          reject(error);
+        }
+      },
+      options
+    );
+
+    // Set overall timeout
+    setTimeout(() => {
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+      
+      if (bestPosition) {
+        console.log('⏰ Timeout reached, using best position available');
+        resolve({
+          latitude: bestPosition.coords.latitude,
+          longitude: bestPosition.coords.longitude,
+          accuracy: bestPosition.coords.accuracy,
+          source: `HTML5 watchPosition (timeout, ${positionCount} updates)`,
+          totalUpdates: positionCount
+        });
+      } else {
+        reject(new Error('Timeout: No position obtained within time limit'));
+      }
+    }, timeoutDuration);
+  });
+};
+
 // Enhanced markdown formatter for Gemini responses
 const formatMarkdownText = (text) => {
   if (!text) return text;
@@ -94,6 +315,7 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
   const [errors, setErrors] = useState({});
   const [debugData, setDebugData] = useState(null); // Add state for debugging data
 
+
   useEffect(() => {
     // Note: Removed auto-location on mount to avoid permission prompts
     // Users should explicitly click "Get My Location" button
@@ -130,15 +352,99 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
     try {
       setLocationLoading(true);
       setLocationError('');
-      const coords = await getLocationAsync();
-      setLocation(coords);
+      
+      // Clear any previous location AND location name first to force refresh
+      setLocation(null);
+      setLocationName('');
+      
+      // Generate unique request ID for tracking
+      const requestId = `GPS-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      console.log(`🔄 [${requestId}] Using HTML5 Geolocation API with multiple strategies...`);
+      
+      let coords = null;
+      let locationSource = '';
+      
+      // Method 1: Try IP-based geolocation first (often more accurate for general area)
+      console.log('📡 Method 1: HTML5 watchPosition (continuous monitoring)...');
+      try {
+        coords = await getLocationWithWatchPosition();
+        locationSource = coords.source;
+        console.log(`✅ Got location from watchPosition: accuracy ${coords.accuracy}m`);
+      } catch (error) {
+        console.warn('⚠️ watchPosition failed:', error.message);
+      }
+
+      
+      // Method 2: Try browser GPS as backup
+      if (!coords) {
+        console.log('� Method 2: Trying browser GPS...');
+        try {
+          coords = await getLocationWithHTML5API();
+          locationSource = coords.source;
+          console.log(`✅ Got location from getCurrentPosition: accuracy ${coords.accuracy}m`);
+        } catch (error) {
+          console.warn('⚠️ getCurrentPosition failed:', error.message);
+        }
+
+      }
+      
+      // Method 3: Fallback to original GPS method
+      if (!coords) {
+        console.log('📍 Method 3: Trying original GPS method...');
+        try {
+          coords = await getLocationAsync();
+          locationSource = 'Fallback GPS method';
+        } catch (error) {
+          console.error('❌ All HTML5 Geolocation methods failed');
+          throw new Error(`Unable to get location using HTML5 API: ${error.message}`);
+        }
+      }
+      
+      // Add timestamp and source info
+      const locationWithTimestamp = {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy || 1000,
+        timestamp: new Date().toISOString(),
+        fetchTime: Date.now(),
+        requestId: requestId,
+        source: locationSource,
+        // Add IP-based location details if available
+        ...(coords.city && { city: coords.city }),
+        ...(coords.region && { region: coords.region }),
+        ...(coords.zip && { zip: coords.zip })
+      };
+      
+      setLocation(locationWithTimestamp);
+      
+      console.log(`✅ [${requestId}] Location received from ${locationSource}:`, {
+        lat: coords.latitude,
+        lng: coords.longitude,
+        accuracy: coords.accuracy ? coords.accuracy + 'm' : 'Unknown',
+        source: locationSource,
+        time: new Date().toLocaleTimeString(),
+        coords: `${coords.latitude}, ${coords.longitude}`,
+        ...(coords.city && { detectedCity: coords.city }),
+        ...(coords.zip && { detectedZip: coords.zip })
+      });
+
+      // 🚨 LOCATION VALIDATION CHECK
+      console.log(`🔍 LOCATION VALIDATION:`, {
+        coordinates: `${coords.latitude}, ${coords.longitude}`,
+        source: locationSource,
+        userReported: "User is in 441809 area",
+        detectedArea: coords.city || 'Unknown',
+        detectedZip: coords.zip || 'Unknown',
+        warning: coords.zip !== '441809' ? 'Location mismatch detected!' : 'Location looks correct'
+      });
       
       // Auto-fill soil, weather and location data all in one request
       await autoFillData(coords);
       
     } catch (error) {
       setLocationError(error.message);
-      console.error('Location error:', error);
+      console.error('❌ Location error:', error);
     } finally {
       setLocationLoading(false);
     }
@@ -146,13 +452,24 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
 
   const autoFillData = async (coords) => {
     try {
-      console.log(`Fetching data for coordinates: ${coords.latitude}, ${coords.longitude}`);
+      console.log(`📡 Fetching data for NEW coordinates:`, {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        timestamp: new Date().toISOString()
+      });
       
       // Get combined soil and weather data for location
       const response = await cropAPI.getSoilWeatherData(coords.latitude, coords.longitude);
       
       // Save response for debugging
       setDebugData(response);
+      
+      console.log('🔍 Full API response received:', {
+        success: response.success,
+        locationReturned: response?.data?.location_info?.display_name,
+        coordinates: `${coords.latitude}, ${coords.longitude}`,
+        timestamp: new Date().toISOString()
+      });
       
       console.log('Full API response:', response);
       
@@ -207,7 +524,11 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
         
         // Set location name if available
         if (data.location_info?.display_name) {
+          console.log(`📍 Setting location name: "${data.location_info.display_name}"`);
+          console.log(`📍 For coordinates: ${coords.latitude}, ${coords.longitude}`);
           setLocationName(data.location_info.display_name);
+        } else {
+          console.warn('⚠️ No location name in response!');
         }
       }
     } catch (error) {
@@ -502,13 +823,29 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed flex items-center"
               >
                 {locationLoading ? (
-                  <>📡 Getting Location...</>
+                  <>� Finding Your Location... (trying multiple sources)</>
                 ) : (
-                  <>🌍 Use My GPS Location</>
+                  <>🌍 Get My Location (HTML5 GPS)</>
                 )}
               </button>
+
             </div>
           </div>
+          
+          {/* Location Loading Message */}
+          {locationLoading && (
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-md p-3">
+              <p className="text-blue-800 text-sm font-medium mb-1">
+                � Finding Your Location Using Multiple Sources...
+              </p>
+              <p className="text-blue-600 text-xs mb-2">
+                ⏳ Trying: IP-based location → Browser GPS → High-accuracy GPS
+              </p>
+              <p className="text-blue-500 text-xs">
+                💡 This should be more accurate than the previous GPS-only method.
+              </p>
+            </div>
+          )}
 
           {/* Location Search */}
           <div className="mb-4 relative">
@@ -559,6 +896,21 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
                     <p className="text-xs text-gray-600">
                       Coordinates: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
                     </p>
+                    {location.source && (
+                      <p className="text-xs text-blue-600 font-medium">
+                        📡 Source: {location.source}
+                      </p>
+                    )}
+                    {location.city && location.zip && (
+                      <p className="text-xs text-orange-600 font-medium">
+                        🏙️ Detected: {location.city} - {location.zip}
+                      </p>
+                    )}
+                    {location.timestamp && (
+                      <p className="text-xs text-green-600 font-medium mt-1">
+                        ⏱️ Fetched: {new Date(location.timestamp).toLocaleTimeString()}
+                      </p>
+                    )}
                   </div>
                 </div>
                 
@@ -570,7 +922,7 @@ const SoilParameterForm = ({ onSubmit, loading }) => {
                   className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:bg-green-400"
                   title="Update to current GPS location"
                 >
-                  {locationLoading ? '📡' : '🌍 GPS'}
+                  {locationLoading ? '📡 Getting...' : '🔄 Refresh GPS'}
                 </button>
               </div>
               

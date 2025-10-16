@@ -352,19 +352,26 @@ class GeolocationService:
         """
         Get location information from coordinates
         """
+        import time
+        
         params = {
             "lat": latitude,
             "lon": longitude,
             "format": "json",
-            "addressdetails": 1
+            "addressdetails": 1,
+            "_": int(time.time() * 1000)  # Cache-busting timestamp
         }
         
         headers = {
-            "User-Agent": "CropRecommendationSystem/1.0"
+            "User-Agent": "CropRecommendationSystem/1.0",
+            "Cache-Control": "no-cache, no-store, must-revalidate",  # Prevent caching
+            "Pragma": "no-cache",
+            "Expires": "0"
         }
         
         async with httpx.AsyncClient() as client:
             try:
+                print(f"🌍 Fetching location for coordinates: {latitude}, {longitude}")
                 response = await client.get(
                     GeolocationService.BASE_URL, 
                     params=params, 
@@ -383,6 +390,8 @@ class GeolocationService:
                     "postcode": address.get("postcode", "Unknown"),
                     "district": address.get("state_district", "Unknown District")
                 }
+                
+                print(f"✅ Location resolved: {location_info['display_name']}")
                 
                 return location_info
                 

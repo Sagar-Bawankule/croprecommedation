@@ -50,24 +50,43 @@ function App() {
       
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setUserLocation({
+          const newLocation = {
             latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          });
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          };
+          setUserLocation(newLocation);
           setLocationError('');
           setLocationLoading(false);
-          console.log('User location obtained:', position.coords.latitude, position.coords.longitude);
+          console.log('✅ Fresh GPS location obtained:', {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy + 'm'
+          });
         },
         (error) => {
-          console.error('Error getting location:', error);
-          setLocationError('Unable to access your GPS location. Please enter a location manually.');
+          console.error('❌ GPS Error:', error);
+          let errorMessage = 'Unable to access your GPS location.';
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location access denied. Please allow location access in your browser settings.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location unavailable. Please check your GPS/location services.';
+              break;
+            case error.TIMEOUT:
+              errorMessage = 'Location request timed out. Please try again.';
+              break;
+            default:
+              errorMessage = 'Unknown error getting location. Please try again.';
+          }
+          setLocationError(errorMessage);
           setLocationLoading(false);
-          // Don't set a default location - let the user enter one manually
         },
         {
-          enableHighAccuracy: true,
-          timeout: 10000, // 10 second timeout
-          maximumAge: 60000
+          enableHighAccuracy: true, // Use GPS instead of network location
+          timeout: 15000, // 15 second timeout
+          maximumAge: 0 // Don't use cached position - always get fresh location
         }
       );
     } else {
@@ -215,18 +234,7 @@ function App() {
                   </button>
                 </div>
                 
-                {/* Location Button */}
-                <button
-                  onClick={getUserLocation}
-                  disabled={locationLoading}
-                  className="px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-400 flex items-center justify-center"
-                >
-                  {locationLoading ? (
-                    <>🔄 Getting Location...</>
-                  ) : (
-                    <>🌍 Get My GPS Location</>
-                  )}
-                </button>
+                
               </div>
             </div>
           </div>
