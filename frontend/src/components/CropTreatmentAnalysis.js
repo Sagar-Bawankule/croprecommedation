@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Leaf, TrendingUp, AlertTriangle, CheckCircle, BarChart3, DollarSign } from 'lucide-react';
 
+// Get API base URL from environment variable
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 // FormattedMarkdown component for rendering markdown content
 const FormattedMarkdown = ({ content, className = '' }) => {
   if (!content) return null;
@@ -154,6 +157,9 @@ const CropTreatmentAnalysis = () => {
     try {
       // Use detailed analysis endpoint for comprehensive results
       const endpoint = detailedAnalysis ? '/api/analyze-crop-detailed' : '/api/analyze-crop';
+      const fullUrl = `${API_BASE_URL}${endpoint}`;
+      
+      console.log('Making request to:', fullUrl);
       
       const requestBody = {
         selected_crop: selectedCrop,
@@ -165,7 +171,7 @@ const CropTreatmentAnalysis = () => {
         requestBody.farm_size_hectares = parseFloat(farmSize) || 1;
       }
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(fullUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -174,7 +180,9 @@ const CropTreatmentAnalysis = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`Analysis failed: ${response.status}`);
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText);
+        throw new Error(`Analysis failed with status ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
@@ -183,7 +191,19 @@ const CropTreatmentAnalysis = () => {
 
     } catch (error) {
       console.error('Error analyzing crop:', error);
-      alert('Error analyzing crop. Please try again.');
+      
+      // More detailed error message
+      let errorMessage = 'Error analyzing crop. Please try again.';
+      
+      if (error.message.includes('Failed to fetch')) {
+        errorMessage = 'Unable to connect to the backend server. Please ensure the backend is running.';
+      } else if (error.message.includes('status 404')) {
+        errorMessage = 'Treatment analysis endpoint not found. Please check if the backend API is properly deployed.';
+      } else if (error.message.includes('status 500')) {
+        errorMessage = 'Server error occurred. Please try again later or contact support.';
+      }
+      
+      alert(errorMessage);
     } finally {
       setIsAnalyzing(false);
     }

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backend API Test</title>
+    <script>
+        // Replace with your actual Render backend URL
+        const backendUrl = 'REPLACE_WITH_YOUR_RENDER_URL'; // Example: https://crop-recommendation-backend.onrender.com
+        
+        async function testBackend() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing connection to backend...';
+            
+            try {
+                // Test a simple GET request
+                const response = await fetch(`${backendUrl}/`);
+                
+                if (response.ok) {
+                    const data = await response.text();
+                    resultDiv.innerHTML = `
+                        <div style="color: green;">
+                            <h3>✅ Connection Successful!</h3>
+                            <p>Backend is responding correctly.</p>
+                            <p>Response: ${data}</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div style="color: orange;">
+                            <h3>⚠️ Backend responded with status ${response.status}</h3>
+                            <p>The backend URL is accessible, but returned an error.</p>
+                            <p>This might be because the root endpoint (/) is not defined in your FastAPI app.</p>
+                            <p>Try checking other endpoints like /docs</p>
+                        </div>
+                    `;
+                }
+                
+                // Also try accessing /docs which should be available in FastAPI
+                const docsResponse = await fetch(`${backendUrl}/docs`);
+                if (docsResponse.ok) {
+                    resultDiv.innerHTML += `
+                        <div style="color: green;">
+                            <h3>✅ API Documentation Available</h3>
+                            <p>FastAPI docs endpoint is accessible.</p>
+                            <p><a href="${backendUrl}/docs" target="_blank">Open API Docs</a></p>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div style="color: red;">
+                        <h3>❌ Connection Failed</h3>
+                        <p>Error: ${error.message}</p>
+                        <p>Possible reasons:</p>
+                        <ul>
+                            <li>Backend URL is incorrect</li>
+                            <li>CORS is not properly configured on the backend</li>
+                            <li>Backend service is not running</li>
+                            <li>Network error or firewall issue</li>
+                        </ul>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Backend API Connection Test</h1>
+    
+    <p>This tool will test if your backend API is accessible.</p>
+    <p><strong>Backend URL:</strong> <span id="backendUrlDisplay"></span></p>
+    
+    <button onclick="testBackend()">Test Backend Connection</button>
+    
+    <div id="result" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc;"></div>
+    
+    <script>
+        document.getElementById('backendUrlDisplay').textContent = backendUrl;
+    </script>
+</body>
+</html>
